@@ -98,7 +98,7 @@ def read_epub_file(opts, filename) :
 		print '%s is not a zip file' % (opts['epub-file'])
 		ret = None
 	except KeyError:
-		print '%s in %s' % (filename, opts['epub-file'])
+		print 'no %s in %s' % (filename, opts['epub-file'])
 		ret = None
 	except IOError:
 		print 'error when read %s' % (opts['epub-file'])
@@ -162,6 +162,9 @@ def read_epub_meta(opts):
 	}
 	opf = read_epub_file(opts, 'OEBPS/content.opf')
 	if opf == None :
+		opf = read_epub_file(opts, 'content.opf')
+	if opf == None :
+		print "no content.opf found!"
 		return None
 	dom = xml.dom.minidom.parseString(opf)
 	for node in dom.documentElement.getElementsByTagName('metadata')[0].childNodes:
@@ -308,7 +311,7 @@ def analyse_epub(opts):
 			target_image = i.filename
 	target_image = target_image.encode('utf-8')
 	# target_image must be an image file, and is big enough!
-	if target_image != '' and max_size > 0 and target_image.startswith('OEBPS/Images/') :
+	if target_image != '' and max_size > 0 :
 		print "found target image %s, size is %d" % (target_image, max_size)
 	else :
 		print "target file not found!"
@@ -316,7 +319,7 @@ def analyse_epub(opts):
 	target_image = target_image.split('/')[-1:][0]
 	target_text = ''
 	for i in enc_list.keys() :
-		if i.encode('utf-8').startswith('OEBPS/Text/') :
+		if i.encode('utf-8').startswith('OEBPS/Text/'):
 			enc_txt = read_epub_file(opts, i.encode('utf-8'))
 			plain_text = decrypt_content(key, enc_txt[16:])
 			if plain_text.find(target_image) != -1:
@@ -349,7 +352,10 @@ def decrypt_epub(opts) :
 				content = read_epub_file(opts, ent.filename)
 				if enc_list.has_key(ent.filename) :
 					plain = decrypt_content(key, content[16:])
-					if ent.filename.find('Text') != -1 :
+					if plain == None :
+						print "decrypt fail %s" % (ent.filename)
+						continue
+					if ent.filename.find('Text/') != -1 :
 						# strip end null
 						plain = plain.rstrip('\0')
 					if opts['verbose'] :
