@@ -179,7 +179,7 @@ def info_epub(opts):
 	"""
 	get meta info of an epub file
 	"""
-	epub_meta = get_epub_meta(opts)
+	epub_meta = read_epub_meta(opts)
 	if epub_meta == None :
 		sys.exit(1)
 	if opts['verbose'] :
