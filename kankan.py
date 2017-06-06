@@ -162,7 +162,9 @@ def read_epub_meta(opts):
 	}
 	opf = read_epub_file(opts, 'OEBPS/content.opf')
 	if opf == None :
-		opf = read_epub_file(opts, 'content.opf')
+		opf = read_epub_file(opts, 'OPS/content.opf')
+	if opf == None :
+		opf = read_epub_file(opts, 'content.opf')		
 	if opf == None :
 		print "no content.opf found!"
 		return None
@@ -237,6 +239,7 @@ def rename_epub(opts) :
 
 def gen_key(opts, enc_file, plain_file) :
 	key = None
+	iv = None
 	enc = read_epub_file(opts, enc_file)
 	try:
 		with open( plain_file, 'rb') as f :
@@ -259,10 +262,13 @@ def gen_key(opts, enc_file, plain_file) :
 	for i in range(diff_len) :
 		plain.append(0)
 	key = array.array('B')
+	iv  = array.array('B')
 	for i in range(len(plain)):
 		key.append(plain[i] ^ enc[i+16])
-	print "key size %d" % (len(key))
-	return key
+	iv = enc[0:16]
+	print 'key size %d' % (len(key))
+	print 'iv size %d' % (len(iv))
+	return (key, iv)
 
 def read_encryption_xml(opts) :
 	encryption_list = {}
@@ -275,15 +281,32 @@ def read_encryption_xml(opts) :
 			encryption_list[uri] = algorithm
 	return encryption_list
 	
-def decrypt_content(key, enc):
+def decrypt_content(key_iv, enc):
+	key = key_iv[0]
+	iv  = key_iv[1]
 	enc = array.array('B', enc)
 	plain = array.array('B')
-	if len(enc) > len(key) :
-		print "encrypted content too long %d > %d" %(len(enc), len(key))
+	if len(enc) - 16 > len(key) :
+		print "encrypted content too long %d > %d" %(len(enc) - 16, len(key))
 		return None
-	for i in range(len(enc)) :
-		plain.append(enc[i] ^ key[i])
+	if iv.tostring() != enc[0:16].tostring() :
+		print "iv mismatch!"
+		return None
+	for i in range(len(enc) - 16) :
+		plain.append(enc[i + 16] ^ key[i])
 	return plain.tostring()									
+
+def is_text_file(filename):
+	return filename.lower().endswith('.html') \
+	or filename.lower().endswith('.txt') \
+	or filename.lower().endswith('.css') \
+	or filename.lower().endswith('.xhtml')
+
+def is_image_file(filename):
+	return filename.lower().endswith('.jpg') \
+	or filename.lower().endswith('.jpeg') \
+	or filename.lower().endswith('.png') \
+	or filename.lower().endswith('.bmp')
 
 def analyse_epub(opts):
 	"""
@@ -311,7 +334,7 @@ def analyse_epub(opts):
 			target_image = i.filename
 	target_image = target_image.encode('utf-8')
 	# target_image must be an image file, and is big enough!
-	if target_image != '' and max_size > 0 :
+	if target_image != '' and max_size > 0 and is_image_file(target_image) :
 		print "found target image %s, size is %d" % (target_image, max_size)
 	else :
 		print "target file not found!"
@@ -319,9 +342,12 @@ def analyse_epub(opts):
 	target_image = target_image.split('/')[-1:][0]
 	target_text = ''
 	for i in enc_list.keys() :
-		if i.encode('utf-8').startswith('OEBPS/Text/'):
+		if is_text_file(i.encode('utf-8')) :
 			enc_txt = read_epub_file(opts, i.encode('utf-8'))
-			plain_text = decrypt_content(key, enc_txt[16:])
+			plain_text = decrypt_content(key, enc_txt)
+			if plain_text == None:
+				print "decrypt fail : %s" % (i)
+				continue
 			if plain_text.find(target_image) != -1:
 				target_text = i.encode('utf-8')
 				print "%s has %s" % (target_text, target_image)
@@ -345,26 +371,29 @@ def decrypt_epub(opts) :
 	if key == None or enc_list == None or entries == None:
 		sys.exit(1)
 	with zipfile.ZipFile(opts['epub-file']+'.dedrm.epub', 'w', zipfile.ZIP_DEFLATED) as z :
-		for ent in entries :
-			if ent.filename[-1:] != '/':
-				if ent.filename == 'META-INF/encryption.xml' :
-					continue
-				content = read_epub_file(opts, ent.filename)
-				if enc_list.has_key(ent.filename) :
-					plain = decrypt_content(key, content[16:])
-					if plain == None :
-						print "decrypt fail %s" % (ent.filename)
+		with zipfile.ZipFile(opts['epub-file']+'.bad.epub', 'w', zipfile.ZIP_DEFLATED) as z_bad :
+			for ent in entries :
+				if ent.filename[-1:] != '/':
+					if ent.filename == 'META-INF/encryption.xml' :
 						continue
-					if ent.filename.find('Text/') != -1 :
-						# strip end null
-						plain = plain.rstrip('\0')
-					if opts['verbose'] :
-						print "add decrypt %s" % (ent.filename)
-					z.writestr(ent.filename, plain)
-				else:
-					if opts['verbose'] :
-						print "add plain %s" % (ent.filename)
-					z.writestr(ent.filename, content)
+					content = read_epub_file(opts, ent.filename)
+					if enc_list.has_key(ent.filename) :
+						plain = decrypt_content(key, content)
+						if plain == None :
+							print "decrypt fail : %s" % (ent.filename)
+							z_bad.writestr(ent.filename, content)
+							continue
+						if is_text_file(ent.filename.encode('utf-8')) :
+							# strip end null
+							plain = plain.rstrip('\0')
+						if opts['verbose'] :
+							print "add decrypt : %s" % (ent.filename)
+						z.writestr(ent.filename, plain)
+					else:
+						if opts['verbose'] :
+							print "add plain : %s" % (ent.filename)
+						z.writestr(ent.filename, content)
+			z_bad.close()
 		z.close()
 	
 
