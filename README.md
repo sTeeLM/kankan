@@ -1,2 +1,2 @@
 # kankan
-dedrm of 某看, success rate 80.06%
+dedrm of XX, success rate 80.06%
