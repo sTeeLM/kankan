@@ -38,7 +38,7 @@ def parse_cmd(argv) :
         'info' : {'opts' : 'v', 'lopts' : ['verbose']},
         'rename' : {'opts' : 'f:', 'lopts' : ['format=']},
         'analyse' : {'opts' : 'e:p:v', 'lopts' : ['encrypted-file=', 'plain-file=', 'verbose']},
-        'decrypt' : {'opts' : 'e:p:v', 'lopts' : ['encrypted-file=', 'plain-file=']}
+        'decrypt' : {'opts' : 'e:p:vt', 'lopts' : ['encrypted-file=', 'plain-file=', 'verbose', 'trunk']}
         }
     parsed_options = {
         'verbose' : 0,
@@ -48,7 +48,8 @@ def parse_cmd(argv) :
         'format' : '{title}.epub',
         'encrypted-file' : '',
         'plain-file' : '',
-        'epub-file' : ''
+        'epub-file' : '',
+		'trunk' : 0
     }
     if len(argv) <= 2:
         usage()
@@ -73,6 +74,8 @@ def parse_cmd(argv) :
                     parsed_options['plain-file'] = arg
                 elif opt in ('-f', '--format') :
                     parsed_options['format'] = arg
+                elif opt in ('-t', '--trunk') :
+                    parsed_options['trunk'] = 1
                 else:
                     usage()
                     sys.exit(1)
@@ -281,20 +284,26 @@ def read_encryption_xml(opts) :
             encryption_list[uri] = algorithm
     return encryption_list
     
-def decrypt_content(key_iv, enc):
+def decrypt_content(key_iv, enc, opts):
     key = key_iv[0]
     iv  = key_iv[1]
     enc = array.array('B', enc)
     plain = array.array('B')
-    if len(enc) - 16 > len(key) :
+    trunked = False
+    s = len(enc) - 16
+    if len(enc) - 16 > len(key) and opts['trunk'] == 0:
         print "encrypted content too long %d > %d" %(len(enc) - 16, len(key))
-        return None
+        return (None, None)
+    elif len(enc) - 16 > len(key) and opts['trunk'] == 1:
+        print "encrypted content too long %d > %d, Trunked!" %(len(enc) - 16, len(key))
+        s = len(key)
+        trunked = True
     if iv.tostring() != enc[0:16].tostring() :
         print "iv mismatch!"
-        return None
-    for i in range(len(enc) - 16) :
+        return (None, None)
+    for i in range(s) :
         plain.append(enc[i + 16] ^ key[i])
-    return plain.tostring()                                 
+    return (plain.tostring(), trunked)                        
 
 def is_text_file(filename):
     return filename.lower().endswith('.html') \
@@ -341,10 +350,11 @@ def analyse_epub(opts):
     # find which encrypted text content has target file
     target_image = target_image.split('/')[-1:][0]
     target_text = ''
+    trunked = False
     for i in enc_list.keys() :
         if is_text_file(i.encode('utf-8')) :
             enc_txt = read_epub_file(opts, i.encode('utf-8'))
-            plain_text = decrypt_content(key, enc_txt)
+            (plain_text, trunked) = decrypt_content(key, enc_txt, opts)
             if plain_text == None:
                 print "decrypt fail : %s" % (i)
                 continue
@@ -377,12 +387,15 @@ def decrypt_epub(opts) :
                     if ent.filename == 'META-INF/encryption.xml' :
                         continue
                     content = read_epub_file(opts, ent.filename)
+                    trunked = False
                     if enc_list.has_key(ent.filename) :
-                        plain = decrypt_content(key, content)
+                        (plain, trunked)  = decrypt_content(key, content, opts)
                         if plain == None :
                             print "decrypt fail : %s" % (ent.filename)
                             z_bad.writestr(ent.filename, content)
                             continue
+                        if trunked :
+                            print "decrypt trunked : %s" % (ent.filename)
                         if is_text_file(ent.filename.encode('utf-8')) :
                             # strip end null
                             plain = plain.rstrip('\0')
