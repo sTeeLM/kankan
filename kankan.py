@@ -4,6 +4,8 @@ import os,sys,getopt,re
 import xml.dom.minidom
 import array
 
+# http://www.duokan.com/store/v0/web/book/xxx
+
 def usage() :
     print"""Usage:
     kankan <command> [<options>] <epubfile>
