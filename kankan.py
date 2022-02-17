@@ -3,11 +3,13 @@ import zipfile
 import os,sys,getopt,re
 import xml.dom.minidom
 import array
-
-# http://www.duokan.com/store/v0/web/book/xxx
+import urllib
+import json
 
 def usage() :
     print"""Usage:
+    kankan download <-v> <book id>
+        donwload: download epub file which book is <xxx>, -v print progress
     kankan <command> [<options>] <epub file>
         list: list content of an epub file
             Options:
@@ -36,6 +38,7 @@ def usage() :
 
 def parse_cmd(argv) :
     cmd_options = {
+        'download': {'opts' : 'v', 'lopts' : ['verbose']},
         'list' : {'opts' : 'vsnr', 'lopts' : ['verbose', 'size', 'name', 'reverse']},
         'info' : {'opts' : 'v', 'lopts' : ['verbose']},
         'rename' : {'opts' : 'f:', 'lopts' : ['format=']},
@@ -220,6 +223,7 @@ def info_epub(opts):
         print 'title: %s' % (epub_meta['title'])
         print 'publisher: %s' % (epub_meta['publisher'])
         print 'creator: %s' % (epub_meta['creator'])
+    sys.exit(0)
 
 def rename_epub(opts) :
     """
@@ -423,7 +427,71 @@ def decrypt_epub(opts) :
                         z.writestr(ent.filename, content)
             z_bad.close()
         z.close()
+    sys.exit(0)
     
+def save_url_to_file(urlstr, outfile):
+    ret = True
+    print "%s ==> %s" %(urlstr, outfile)
+    try:
+        save_size = 0
+        fp = urllib.urlopen(urlstr.encode('utf-8'));
+        with open( outfile, 'wb') as fo :
+            while True:
+                output_data = fp.read(1024)
+                if output_data == '':
+                    break;
+                fo.write(output_data)
+                save_size += len(output_data)
+                sys.stdout.write("Download bytes: %d   \r" % (save_size) )
+    except IOError:
+        print "can not save %s" %(urlstr)
+        ret = False
+    else:
+        fp.close()
+    return ret
+
+# http://www.duokan.com/store/v0/web/book/xxx
+def download_epub(opts):
+    info_url = 'http://www.duokan.com/store/v0/web/book/' + opts['epub-file'];
+    print 'url is %s' %(info_url)
+
+    try:
+        fp = urllib.urlopen(info_url);
+        book_info = fp.read()
+    except IOError:
+        print "can not load %s" %(info_url)
+        sys.exit(1)
+    else:
+        fp.close()
+
+    try:
+        book_hash = json.loads(book_info)
+        book_url = book_hash['book']['epub']
+        coverpage_url = book_hash['book']['cover']
+    except ValueError:
+        print "can not download book info, return %s" %(book_info)
+        sys.exit(1)
+    except KeyError:
+        if opts['verbose'] == 1:
+            print "book info load error, data is %s" %(book_hash)
+        else:
+            print "book info load error, use -v see detail"
+        sys.exit(1)
+
+    if coverpage_url[-2] == '!' and coverpage_url[-1] == 'm':
+        coverpage_url = coverpage_url[0:-2]
+
+    book_name = book_url.split()[-1].split('/')[-1]
+    coverpage_name = coverpage_url.split()[-1].split('/')[-1]
+
+    print 'book_url is %s' %(book_url)
+    print 'coverpage_url is %s' %(coverpage_url)
+
+    save_url_to_file(coverpage_url, coverpage_name)
+    save_url_to_file(book_url, book_name)
+
+    sys.exit(0)
+
 def main(argv) :
     cmd, opts = parse_cmd(argv)
     if opts['key-pairs'] != None:
@@ -431,7 +499,9 @@ def main(argv) :
         if opts['key-pairs'] == None:
             print "parse key pairs error!"
             sys.exit(1)
-    if cmd == 'list' :
+    if cmd == 'download' :
+        download_epub(opts)
+    elif cmd == 'list' :
         list_epub(opts)
     elif cmd == 'info' :
         info_epub(opts)
