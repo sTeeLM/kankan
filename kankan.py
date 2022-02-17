@@ -8,7 +8,7 @@ import array
 
 def usage() :
     print"""Usage:
-    kankan <command> [<options>] <epubfile>
+    kankan <command> [<options>] <epub file>
         list: list content of an epub file
             Options:
             -v | --verbose : verbose output
@@ -24,13 +24,13 @@ def usage() :
                 {title} for title, {contributor} for contributor, {publisher} for publisher, etc.
         analyse: analyse epub file
             Options:
-            -e | --encrypted-file : an encrypted file path in epub, for example: "OEBPS/Images/coverpage.jpeg"
-            -p | --plain-file : path of plain context of the encrypted file
+            -k | --key-pairs : an encrypted file path in epub, and path of plain context of the encrypted file,
+                              for example: "OEBPS/Images/coverpage.jpeg:coverpage.jpeg,OEBPS/Images/image1.jpeg:image2.jpeg"               
             -v | --verbose : show target text content
         decrypt: decrypt epub file
             Options:
-            -e | --encrypted-file: an encrypted file path in epub, for example: "OEBPS/Images/coverpage.jpeg"
-            -p | --plain-file: path of plain context of the encrypted file
+            -k | --key-pairs : an encrypted file path in epub, and path of plain context of the encrypted file,
+                              for example: "OEBPS/Images/coverpage.jpeg:coverpage.jpeg,OEBPS/Images/image1.jpeg:image2.jpeg"
             -v | --verbose : print progress
     """
 
@@ -39,8 +39,8 @@ def parse_cmd(argv) :
         'list' : {'opts' : 'vsnr', 'lopts' : ['verbose', 'size', 'name', 'reverse']},
         'info' : {'opts' : 'v', 'lopts' : ['verbose']},
         'rename' : {'opts' : 'f:', 'lopts' : ['format=']},
-        'analyse' : {'opts' : 'e:p:v', 'lopts' : ['encrypted-file=', 'plain-file=', 'verbose']},
-        'decrypt' : {'opts' : 'e:p:vt', 'lopts' : ['encrypted-file=', 'plain-file=', 'verbose', 'trunk']}
+        'analyse' : {'opts' : 'k:v', 'lopts' : ['key-pairs=', 'verbose']},
+        'decrypt' : {'opts' : 'k:vt', 'lopts' : ['key-pairs=', 'verbose', 'trunk']},
         }
     parsed_options = {
         'verbose' : 0,
@@ -48,8 +48,7 @@ def parse_cmd(argv) :
         'name' : 0,
         'reverse' : 0,
         'format' : '{title}.epub',
-        'encrypted-file' : '',
-        'plain-file' : '',
+        'key-pairs': None,
         'epub-file' : '',
 		'trunk' : 0
     }
@@ -70,10 +69,8 @@ def parse_cmd(argv) :
                     parsed_options['name'] = 1
                 elif opt in ('-r', '--reverse') :
                     parsed_options['reverse'] = 1
-                elif opt in ('-e', '--encrypted-file') :
-                    parsed_options['encrypted-file'] = arg
-                elif opt in ('-p', '--plain-file') :
-                    parsed_options['plain-file'] = arg
+                elif opt in ('-k', '--key-pairs') :
+                    parsed_options['key-pairs'] = arg
                 elif opt in ('-f', '--format') :
                     parsed_options['format'] = arg
                 elif opt in ('-t', '--trunk') :
@@ -93,6 +90,20 @@ def parse_cmd(argv) :
     else:
         usage()
         sys.exit(1)
+
+def parse_keypairs(opts):
+    key_pairs = opts['key-pairs']
+    key_pairs = str.split(key_pairs, ',')
+    ret={}
+    for p in key_pairs:
+        (enc_file, plain_file) = str.split(p, ':')
+        (key, iv) = gen_key(opts, enc_file, plain_file)
+        if key == None or iv == None:
+            opts['key-pairs'] = None
+            return
+        ret[iv.tostring()] = key
+        print "add key pair %s:%d from %s:%s" %(dump_array(iv), len(key), enc_file, plain_file)
+    opts['key-pairs'] = ret
 
 def read_epub_file(opts, filename) :
     ret = None
@@ -286,13 +297,26 @@ def read_encryption_xml(opts) :
             encryption_list[uri] = algorithm
     return encryption_list
     
-def decrypt_content(key_iv, enc, opts):
-    key = key_iv[0]
-    iv  = key_iv[1]
+def dump_array(av):
+    ret_str = ''
+    for i in range(len(av)) :
+        ret_str += format(av[i], 'x')
+    return ret_str
+
+def decrypt_content(enc, opts):
     enc = array.array('B', enc)
     plain = array.array('B')
     trunked = False
+    if len(enc) < 16:
+        print "encrypted content too small %d < %d" %(len(enc), 16)
+        return (None, None)
     s = len(enc) - 16
+    iv = enc[0:16]
+    if opts['key-pairs'].has_key(iv.tostring()) :
+        key = opts['key-pairs'][iv.tostring()]
+    else:
+        print "unknown iv %s!" %(dump_array(iv))
+        return (None, None)
     if len(enc) - 16 > len(key) and opts['trunk'] == 0:
         print "encrypted content too long %d > %d" %(len(enc) - 16, len(key))
         return (None, None)
@@ -300,9 +324,6 @@ def decrypt_content(key_iv, enc, opts):
         print "encrypted content too long %d > %d, Trunked!" %(len(enc) - 16, len(key))
         s = len(key)
         trunked = True
-    if iv.tostring() != enc[0:16].tostring() :
-        print "iv mismatch!"
-        return (None, None)
     for i in range(s) :
         plain.append(enc[i + 16] ^ key[i])
     return (plain.tostring(), trunked)                        
@@ -323,13 +344,9 @@ def analyse_epub(opts):
     """
     analyse epub file
     """
-    if opts['encrypted-file'] == '' or  opts['plain-file'] == '':
-        print "need encrypted file and it's plain content to analyse epub"
-        sys.exit(1)
-    key = gen_key(opts, opts['encrypted-file'], opts['plain-file'])
     enc_list = read_encryption_xml(opts)
     entries = list_epub_entries(opts)
-    if key == None or enc_list == None or entries == None:
+    if enc_list == None or entries == None:
         sys.exit(1)
     # check algorithm should be all 'http://www.w3.org/2001/04/xmlenc#aes128-ctr'
     # search target file
@@ -356,7 +373,7 @@ def analyse_epub(opts):
     for i in enc_list.keys() :
         if is_text_file(i.encode('utf-8')) :
             enc_txt = read_epub_file(opts, i.encode('utf-8'))
-            (plain_text, trunked) = decrypt_content(key, enc_txt, opts)
+            (plain_text, trunked) = decrypt_content(enc_txt, opts)
             if plain_text == None:
                 print "decrypt fail : %s" % (i)
                 continue
@@ -374,13 +391,9 @@ def decrypt_epub(opts) :
     """
     decrypt epub file
     """
-    if opts['encrypted-file'] == '' or  opts['plain-file'] == '':
-        print "need encrypted file and it's plain content to decrypt epub"
-        sys.exit(1)
-    key = gen_key(opts, opts['encrypted-file'], opts['plain-file'])
     enc_list = read_encryption_xml(opts)
     entries = list_epub_entries(opts)
-    if key == None or enc_list == None or entries == None:
+    if enc_list == None or entries == None:
         sys.exit(1)
     with zipfile.ZipFile(opts['epub-file']+'.dedrm.epub', 'w', zipfile.ZIP_DEFLATED) as z :
         with zipfile.ZipFile(opts['epub-file']+'.bad.epub', 'w', zipfile.ZIP_DEFLATED) as z_bad :
@@ -391,7 +404,7 @@ def decrypt_epub(opts) :
                     content = read_epub_file(opts, ent.filename)
                     trunked = False
                     if enc_list.has_key(ent.filename) :
-                        (plain, trunked)  = decrypt_content(key, content, opts)
+                        (plain, trunked)  = decrypt_content(content, opts)
                         if plain == None :
                             print "decrypt fail : %s" % (ent.filename)
                             z_bad.writestr(ent.filename, content)
@@ -411,9 +424,13 @@ def decrypt_epub(opts) :
             z_bad.close()
         z.close()
     
-
 def main(argv) :
     cmd, opts = parse_cmd(argv)
+    if opts['key-pairs'] != None:
+        parse_keypairs(opts)
+        if opts['key-pairs'] == None:
+            print "parse key pairs error!"
+            sys.exit(1)
     if cmd == 'list' :
         list_epub(opts)
     elif cmd == 'info' :
@@ -422,7 +439,9 @@ def main(argv) :
         rename_epub(opts)
     elif cmd == 'analyse' :
         analyse_epub(opts)
-    else :
+    elif cmd == 'decrypt' :
         decrypt_epub(opts)
+    else:
+        sys.exit(1)
 
 main(sys.argv)
