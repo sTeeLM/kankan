@@ -434,15 +434,20 @@ def save_url_to_file(urlstr, outfile):
     print("%s ==> %s" %(urlstr, outfile))
     try:
         save_size = 0
-        fp = urllib.request.urlopen(urlstr.encode('utf-8'));
+        req = urllib.request.Request(url=urlstr, method='GET')
+        fp = urllib.request.urlopen(req);
         with open( outfile, 'wb') as fo :
+            output_size = int(fp.getheader('content-length'))
             while True:
                 output_data = fp.read(1024)
-                if output_data == '':
+                if not output_data:
                     break;
                 fo.write(output_data)
                 save_size += len(output_data)
-                sys.stdout.write("Download bytes: %d   \r" % (save_size) )
+                if output_size:
+                    sys.stdout.write("Download progress: %d\r" % (save_size * 100.0 / output_size) )
+                else:
+                    sys.stdout.write("Download bytes: %d\r" % (save_size) )
     except IOError:
         print("can not save %s" %(urlstr))
         ret = False
