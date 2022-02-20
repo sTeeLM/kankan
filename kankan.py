@@ -27,7 +27,8 @@ def usage() :
         analyse: analyse epub file
             Options:
             -k | --key-pairs : an encrypted file path in epub, and path of plain context of the encrypted file,
-                              for example: "OEBPS/Images/coverpage.jpeg:coverpage.jpeg,OEBPS/Images/image1.jpeg:image2.jpeg"               
+                              for example: "OEBPS/Images/coverpage.jpeg:coverpage.jpeg,OEBPS/Images/image1.jpeg:image2.jpeg"
+            -t | --taget: an targe file to find, default OEBPS/Images/coverpage.jpeg
             -v | --verbose : show target text content
         dedrm: dedrm epub file
             Options:
@@ -42,7 +43,7 @@ def parse_cmd(argv) :
         'list' : {'opts' : 'vsnr', 'lopts' : ['verbose', 'size', 'name', 'reverse']},
         'info' : {'opts' : 'v', 'lopts' : ['verbose']},
         'rename' : {'opts' : 'f:', 'lopts' : ['format=']},
-        'analyse' : {'opts' : 'k:v', 'lopts' : ['key-pairs=', 'verbose']},
+        'analyse' : {'opts' : 'k:vt:', 'lopts' : ['key-pairs=', 'verbose', 'target=']},
         'dedrm' : {'opts' : 'k:vt', 'lopts' : ['key-pairs=', 'verbose', 'trunk']},
         }
     parsed_options = {
@@ -52,6 +53,7 @@ def parse_cmd(argv) :
         'reverse' : 0,
         'format' : '{title}.epub',
         'key-pairs': None,
+        'target': '',
         'epub-file' : '',
 		'trunk' : 0
     }
@@ -77,7 +79,10 @@ def parse_cmd(argv) :
                 elif opt in ('-f', '--format') :
                     parsed_options['format'] = arg
                 elif opt in ('-t', '--trunk') :
-                    parsed_options['trunk'] = 1
+                    if argv[1] == 'dedrm':
+                        parsed_options['trunk'] = 1
+                    else:
+                        parsed_options['target'] = arg
                 else:
                     usage()
                     sys.exit(1)
@@ -104,7 +109,7 @@ def parse_keypairs(opts):
         if key == None or iv == None:
             opts['key-pairs'] = None
             return
-        ret[iv.tostring()] = key
+        ret[iv.tobytes()] = key
         print("add key pair %s:%d from %s:%s" %(dump_array(iv), len(key), enc_file, plain_file))
     opts['key-pairs'] = ret
 
@@ -235,18 +240,18 @@ def rename_epub(opts) :
     new_name = ''
     try :
         new_name = opts['format'].format(
-            title       = epub_meta['title'].encode('utf-8'),
-            creator     = epub_meta['creator'].encode('utf-8'),
-            publisher   = epub_meta['publisher'].encode('utf-8'),
-            subject     = epub_meta['subject'].encode('utf-8'),
-            description = epub_meta['description'].encode('utf-8'),
-            contributor = epub_meta['contributor'].encode('utf-8'),
-            date        = epub_meta['date'].encode('utf-8'),
-            source      = epub_meta['source'].encode('utf-8'),
-            language    = epub_meta['language'].encode('utf-8'),
-            relation    = epub_meta['relation'].encode('utf-8'),
-            coverage    = epub_meta['coverage'].encode('utf-8'),
-            rights      = epub_meta['rights'].encode('utf-8'),
+            title       = epub_meta['title'],
+            creator     = epub_meta['creator'],
+            publisher   = epub_meta['publisher'],
+            subject     = epub_meta['subject'],
+            description = epub_meta['description'],
+            contributor = epub_meta['contributor'],
+            date        = epub_meta['date'],
+            source      = epub_meta['source'],
+            language    = epub_meta['language'],
+            relation    = epub_meta['relation'],
+            coverage    = epub_meta['coverage'],
+            rights      = epub_meta['rights'],
         )
     except KeyError:
         sys.exit(1)
@@ -316,8 +321,8 @@ def dedrm_content(enc, opts):
         return (None, None)
     s = len(enc) - 16
     iv = enc[0:16]
-    if iv.tostring() in opts['key-pairs'] :
-        key = opts['key-pairs'][iv.tostring()]
+    if iv.tobytes() in opts['key-pairs'] :
+        key = opts['key-pairs'][iv.tobytes()]
     else:
         print("unknown iv %s!" %(dump_array(iv)))
         return (None, None)
@@ -330,7 +335,7 @@ def dedrm_content(enc, opts):
         trunked = True
     for i in range(s) :
         plain.append(enc[i + 16] ^ key[i])
-    return (plain.tostring(), trunked)                        
+    return (plain.tobytes(), trunked)                        
 
 def is_text_file(filename):
     return filename.lower().endswith('.html') \
@@ -355,18 +360,25 @@ def analyse_epub(opts):
     # check algorithm should be all 'http://www.w3.org/2001/04/xmlenc#aes128-ctr'
     # search target file
     max_size = 0
-    target_image = ''
-    for i in list(enc_list.keys()) :
-        if enc_list[i] != 'http://www.w3.org/2001/04/xmlenc#aes128-ctr' :
-            print("unknown algorithm %s of %s" % (nc_list[i], i))
-            sys.exit(1)
-    for i in entries :
-        if i.file_size > max_size and i.filename in enc_list :
-            max_size = i.file_size
-            target_image = i.filename
-    target_image = target_image.encode('utf-8')
+    if opts['target']:
+        target_image = opts['target']
+        for i in entries :
+            print('test %s' % (i.filename))
+            if target_image == i.filename:
+                max_size = i.file_size
+    else:
+        target_image = ''
+        for i in list(enc_list.keys()) :
+            if enc_list[i] != 'http://www.w3.org/2001/04/xmlenc#aes128-ctr' :
+                print("unknown algorithm %s of %s" % (nc_list[i], i))
+                sys.exit(1)
+        for i in entries :
+            if i.file_size > max_size and i.filename in enc_list :
+                max_size = i.file_size
+                target_image = i.filename
+      
     # target_image must be an image file, and is big enough!
-    if target_image != '' and max_size > 0 and is_image_file(target_image) :
+    if target_image and max_size > 0 and is_image_file(target_image) :
         print("found target image %s, size is %d" % (target_image, max_size))
     else :
         print("target file not found!")
@@ -375,17 +387,17 @@ def analyse_epub(opts):
     target_text = ''
     trunked = False
     for i in list(enc_list.keys()) :
-        if is_text_file(i.encode('utf-8')) :
-            enc_txt = read_epub_file(opts, i.encode('utf-8'))
+        if is_text_file(i) :
+            enc_txt = read_epub_file(opts, i)
             (plain_text, trunked) = dedrm_content(enc_txt, opts)
             if plain_text == None:
                 print("dedrm fail : %s" % (i))
                 continue
-            if plain_text.find(target_image) != -1:
-                target_text = i.encode('utf-8')
+            if plain_text.decode('utf-8').find(target_image) != -1:
+                target_text = i
                 print("%s has %s" % (target_text, target_image))
                 if(opts['verbose']) :
-                    print("content is \n%s" % (plain_text))
+                    print("content is \n%s" % (plain_text.decode('utf-8')))
                 else :
                     print("use -v to show content")
                 break
@@ -415,9 +427,9 @@ def dedrm_epub(opts) :
                             continue
                         if trunked :
                             print("dedrm trunked : %s" % (ent.filename))
-                        if is_text_file(ent.filename.encode('utf-8')) :
+                        if is_text_file(ent.filename) :
                             # strip end null
-                            plain = plain.rstrip('\0')
+                            plain = plain.rstrip(b'\0')
                         if opts['verbose'] :
                             print("add dedrm : %s" % (ent.filename))
                         z.writestr(ent.filename, plain)
