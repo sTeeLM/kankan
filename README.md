@@ -1,10 +1,10 @@
 # kankan
 dedrm of XX, success rate 80.06%
 # 使用方法
-1）下载某看drm的的epub（通过android客户端）
-2）通过工具的list命令，获得大小最大的文件，一般是内容配图。。。。，如果不是配图，dedrm失败T——T
-3）在某看web版阅读器上找到这个图片并下载（明文）
-4）通过工具的analyse命令，输入明文图片和对应epub中加密图片路径，如果能看到明文打印，成功！
-5）通过工具的decrypt命令，输入明文图片和对应epub中加密图片路径，job done！
+1. 通过download命令下载某看drm的的epub（通过android客户端）和coverpage
+2. 通过list命令看看最大的是不是一个图片文件，否则失败
+3. 如果最大文件是OEBPS/Images/coverpage.jpg，恭喜，可能能不花钱dedrm，否则花钱买电子书，并且通过web阅读器得到那个最大图片文件的明文
+4. 尝试通过dedrm和analyse命令，利用最大的那个图片明文（可能是coverpage）和下载下来的epub，产生dedrm结果，如果使用了多个iv，依次找到对应图片明文并附加在-k之后
+5. 反复尝试步骤4
 # 原理
-内容加密per文件使用aes128-ctr，且所有文件使用一样的key和iv。。。。
+文件加密使用aes128-ctr，只要有最大文件的明文密文就可以还原所有内容明文，而且最大文件往往是图片，并且是通过web可获得的coverpage.jpg
