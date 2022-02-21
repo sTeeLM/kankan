@@ -9,7 +9,7 @@ import json
 def usage() :
     print("""Usage:
     kankan download <-v> <book id>
-        donwload: download epub file which book is <xxx>, -v print progress
+        donwload: download epub file which book id is <xxx>, -v print progress
     kankan <command> [<options>] <epub file>
         list: list content of an epub file
             Options:
@@ -19,7 +19,7 @@ def usage() :
             -r | --reverse : reverse order when sort
         info: get meta information
             Options:
-            -v | verbose : verbose output
+            -v | --verbose : verbose output
         rename: rename epub file
             Options:
             -f | --format : format string
