@@ -272,7 +272,7 @@ def gen_key(opts, enc_file, plain_file) :
     except IOError:
             plain = None
     if plain == None or enc == None :
-        return None
+        return (None, None)
     print("plain size %d" % len(plain))
     print("encrypt size %d" % len(enc))
     # check plain file size
@@ -280,7 +280,7 @@ def gen_key(opts, enc_file, plain_file) :
     if diff_len < 0 or diff_len >= 16 :
         print("plain file size %d mismatch with encrypted one %d , should be [%d %d]" % \
             (len(plain), len(enc), len(enc) - 16 - 15, len(enc) - 16))
-        return None
+        return (None, None)
     # make key
     enc = array.array('B', enc)
     plain = array.array('B', plain)
