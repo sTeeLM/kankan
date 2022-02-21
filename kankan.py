@@ -441,7 +441,7 @@ def dedrm_epub(opts) :
         z.close()
     sys.exit(0)
     
-def save_url_to_file(urlstr, outfile):
+def save_url_to_file(urlstr, outfile, opts):
     ret = True
     print("%s ==> %s" %(urlstr, outfile))
     try:
@@ -456,10 +456,11 @@ def save_url_to_file(urlstr, outfile):
                     break;
                 fo.write(output_data)
                 save_size += len(output_data)
-                if output_size:
-                    sys.stdout.write("Download progress: %d\r" % (save_size * 100.0 / output_size) )
-                else:
-                    sys.stdout.write("Download bytes: %d\r" % (save_size) )
+                if opts['verbose'] :
+                    if output_size:
+                        sys.stdout.write("Download progress: %d\r" % (save_size * 100.0 / output_size) )
+                    else:
+                        sys.stdout.write("Download bytes: %d\r" % (save_size) )
     except IOError:
         print("can not save %s" %(urlstr))
         ret = False
@@ -504,8 +505,8 @@ def download_epub(opts):
     print('book_url is %s' %(book_url))
     print('coverpage_url is %s' %(coverpage_url))
 
-    save_url_to_file(coverpage_url, coverpage_name)
-    save_url_to_file(book_url, book_name)
+    save_url_to_file(coverpage_url, coverpage_name, opts)
+    save_url_to_file(book_url, book_name, opts)
 
     sys.exit(0)
 
