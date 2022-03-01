@@ -27,13 +27,13 @@ def usage() :
         analyse: analyse epub file
             Options:
             -k | --key-pairs : an encrypted file path in epub, and path of plain context of the encrypted file,
-                              for example: "OEBPS/Images/coverpage.jpeg:coverpage.jpeg,OEBPS/Images/image1.jpeg:image2.jpeg"
+                              for example: "OEBPS/Images/coverpage.jpg:coverpage.jpeg,OEBPS/Images/image1.jpeg:image2.jpeg"
             -t | --taget: an targe file to find, default OEBPS/Images/coverpage.jpeg
             -v | --verbose : show target text content
         dedrm: dedrm epub file
             Options:
             -k | --key-pairs : an encrypted file path in epub, and path of plain context of the encrypted file,
-                              for example: "OEBPS/Images/coverpage.jpeg:coverpage.jpeg,OEBPS/Images/image1.jpeg:image2.jpeg"
+                              for example: "OEBPS/Images/coverpage.jpg:coverpage.jpeg,OEBPS/Images/image1.jpeg:image2.jpeg"
             -v | --verbose : print progress
     """)
 
