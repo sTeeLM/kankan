@@ -78,7 +78,7 @@ def parse_cmd(argv) :
                     parsed_options['key-pairs'] = arg
                 elif opt in ('-f', '--format') :
                     parsed_options['format'] = arg
-                elif opt in ('-t', '--trunk') :
+                elif opt in ('-t', '--trunk') or  opt in ('-t', '--target'):
                     if argv[1] == 'dedrm':
                         parsed_options['trunk'] = 1
                     else:
@@ -507,6 +507,8 @@ def download_epub(opts):
 
     save_url_to_file(coverpage_url, coverpage_name, opts)
     save_url_to_file(book_url, book_name, opts)
+
+    print("use './kankan.py analyse -v -k OEBPS/Images/coverpage.jpg:%s %s' to find targe image" % (coverpage_name, book_name))
 
     sys.exit(0)
 
