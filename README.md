@@ -16,3 +16,5 @@ dedrm demo of XX, success rate 80.06%
 
 # 建议解决方法
 1. epub中每文件加密用不同iv
+2. web reader中图片做缩放
+3. 更换加密算法为cbc或者其它模式
