@@ -55,7 +55,7 @@ def parse_cmd(argv) :
         'key-pairs': None,
         'target': '',
         'epub-file' : '',
-		'trunk' : 0
+        'trunk' : 0
     }
     if len(argv) <= 2:
         usage()
