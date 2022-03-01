@@ -8,6 +8,8 @@ dedrm demo of XX, success rate 80.06%
 4. 尝试通过dedrm和analyse命令，利用最大的那个图片明文（可能是coverpage）和下载下来的epub，产生dedrm结果，如果使用了多个iv，依次找到对应图片明文并附加在-k之后
 5. 反复尝试步骤4
 
+注：如果你能忍受一些图片内容被截断，可以不用纠结获得最大内容图片
+
 # 原理
 1. 文件加密使用aes128-ctr
 2. 加密用的iv epub所有文件相同或者被大量复用
